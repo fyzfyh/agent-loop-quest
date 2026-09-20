@@ -1,0 +1,780 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Agent Loop Quest — MIS3011 WK1 Lab</title>
+<meta name="description" content="A mini-game about how AI agents work: run the Understand → Plan → Act → Verify loop and ship the goal. Built for MIS3011 Advanced AI for Business, WK1 Lab.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🤖</text></svg>">
+<style>
+  :root{
+    --bg:#0b0e14; --panel:#121826; --panel2:#0d1320; --line:#223048;
+    --text:#e9edf5; --muted:#8a93a8; --lime:#c9f24b;
+    --u:#4aa8ff; --p:#35b5a2; --a:#8fc94b; --v:#f2c14e; --red:#ff5d73;
+    --mono:ui-monospace,'Cascadia Mono','JetBrains Mono',Consolas,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    background:
+      radial-gradient(1200px 500px at 50% -10%, rgba(74,168,255,.10), transparent 60%),
+      radial-gradient(900px 400px at 90% 110%, rgba(201,242,75,.07), transparent 60%),
+      var(--bg);
+    color:var(--text);
+    font-family:system-ui,-apple-system,'Segoe UI',Roboto,'PingFang SC','Microsoft YaHei',sans-serif;
+    line-height:1.5; min-height:100vh;
+  }
+  #app{max-width:1080px;margin:0 auto;padding:20px 20px 48px;position:relative}
+  .screen{display:none;flex-direction:column;gap:18px;animation:fadein .35s ease}
+  .screen.active{display:flex}
+  @keyframes fadein{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+
+  h1,h2,h3{line-height:1.2}
+  .mono{font-family:var(--mono)}
+  .muted{color:var(--muted)}
+
+  /* ---------- buttons ---------- */
+  .btn{
+    font:inherit;font-weight:700;letter-spacing:.4px;cursor:pointer;
+    border:1px solid var(--line);background:var(--panel);color:var(--text);
+    padding:12px 26px;border-radius:12px;transition:transform .12s ease, box-shadow .12s ease, background .12s;
+  }
+  .btn:hover{transform:translateY(-1px)}
+  .btn.primary{background:var(--lime);border-color:var(--lime);color:#101500}
+  .btn.primary:hover{box-shadow:0 6px 24px rgba(201,242,75,.35)}
+  .btn:active{transform:translateY(0)}
+
+  /* ---------- title screen ---------- */
+  #screen-title{align-items:center;text-align:center;padding-top:7vh;gap:26px}
+  .kicker{font-family:var(--mono);font-size:12px;letter-spacing:3px;color:var(--muted);text-transform:uppercase}
+  .logo{font-size:clamp(38px,7vw,72px);font-weight:900;letter-spacing:-1px}
+  .logo .lq{color:var(--lime)}
+  .loop-strip{display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap;margin-top:4px}
+  .loop-box{
+    font-family:var(--mono);font-weight:700;font-size:13px;letter-spacing:1px;
+    border:1px solid var(--line);border-radius:10px;padding:9px 14px;background:var(--panel);
+    display:flex;align-items:center;gap:8px;
+  }
+  .loop-box .dot{width:9px;height:9px;border-radius:50%}
+  .arrow{color:var(--muted)}
+  .tagline{max-width:560px;color:var(--muted);font-size:16px}
+  .tagline b{color:var(--text)}
+  .credit{font-family:var(--mono);font-size:11px;letter-spacing:2px;color:#5b6478;text-transform:uppercase;margin-top:12px}
+
+  /* ---------- brief screen ---------- */
+  #screen-brief{align-items:center;padding-top:5vh}
+  .brief-card{
+    width:100%;max-width:640px;background:var(--panel);border:1px solid var(--line);
+    border-radius:18px;padding:26px;display:flex;flex-direction:column;gap:16px;
+  }
+  .brief-head{display:flex;justify-content:space-between;align-items:center}
+  .chip{
+    font-family:var(--mono);font-size:11px;letter-spacing:2px;font-weight:700;
+    padding:5px 10px;border-radius:999px;background:rgba(201,242,75,.12);color:var(--lime);
+    border:1px solid rgba(201,242,75,.3);
+  }
+  .chip.ghost{background:transparent;color:var(--muted);border-color:var(--line)}
+  .bubble{
+    background:var(--panel2);border:1px solid var(--line);border-left:3px solid var(--u);
+    border-radius:12px;padding:14px 16px;
+  }
+  .bubble .who{font-family:var(--mono);font-size:11px;letter-spacing:2px;color:var(--u);display:block;margin-bottom:6px}
+  .brief-meta{display:flex;gap:14px;flex-wrap:wrap;font-size:13px;color:var(--muted)}
+  .brief-meta b{color:var(--text)}
+
+  /* ---------- play screen ---------- */
+  .hud{display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap}
+  .hud-left{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .hud-right{display:flex;gap:16px;align-items:center;flex-wrap:wrap}
+  .stat{font-family:var(--mono);font-size:11px;letter-spacing:2px;color:var(--muted)}
+  .stat b{display:block;font-size:18px;color:var(--text);letter-spacing:0}
+  .trust{display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:11px;letter-spacing:2px;color:var(--muted)}
+  .trust b{color:var(--text)}
+  .bar{width:110px;height:8px;background:#1a2233;border-radius:99px;overflow:hidden}
+  .bar i{display:block;height:100%;background:var(--a);border-radius:99px;transition:width .4s ease, background .4s}
+  .bar.big{width:100%;height:10px;margin-top:6px}
+
+  .goal-bubble{border-left-color:var(--lime)}
+  .goal-bubble .who{color:var(--lime)}
+
+  .play-grid{display:grid;grid-template-columns:330px 1fr;gap:14px}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px}
+  .panel h3{font-family:var(--mono);font-size:11px;letter-spacing:2px;color:var(--muted);margin-bottom:12px;font-weight:700}
+  #steps-list{list-style:none;display:flex;flex-direction:column;gap:8px;min-height:120px}
+  #steps-list li{
+    display:flex;align-items:center;gap:10px;font-family:var(--mono);font-size:13px;
+    padding:8px 10px;border-radius:9px;border:1px dashed #1c2638;color:#4d5870;
+  }
+  #steps-list li.done{border-style:solid;border-color:var(--line);color:var(--text);background:rgba(255,255,255,.02)}
+  #steps-list li.now{border-style:solid;color:var(--lime);border-color:rgba(201,242,75,.4);background:rgba(201,242,75,.06);animation:pulse 1.6s infinite}
+  @keyframes pulse{50%{box-shadow:0 0 0 4px rgba(201,242,75,.08)}}
+  .steptag{font-size:10px;letter-spacing:2px;color:var(--muted)}
+
+  .console-panel{display:flex;flex-direction:column;min-height:220px}
+  #console{
+    flex:1;font-family:var(--mono);font-size:12.5px;display:flex;flex-direction:column;gap:7px;
+    overflow-y:auto;max-height:300px;padding-right:4px;
+  }
+  #console .line{color:#aeb7c9;animation:fadein .25s ease}
+  #console .line.good{color:#b7e26a}
+  #console .line.bad{color:var(--red)}
+  #console .line.info{color:var(--u)}
+  #console .line .t{color:#5b6478;margin-right:8px}
+
+  .actions h3{font-family:var(--mono);font-size:11px;letter-spacing:2px;color:var(--muted);margin-bottom:10px}
+  .action-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+  .action-card{
+    font:inherit;text-align:left;cursor:pointer;color:var(--text);
+    background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px;
+    display:flex;flex-direction:column;gap:8px;position:relative;
+    transition:transform .12s ease, border-color .12s, box-shadow .12s;
+  }
+  .action-card:hover{transform:translateY(-3px)}
+  .action-card:disabled{opacity:.45;cursor:not-allowed;transform:none}
+  .action-card .ac-top{display:flex;align-items:center;gap:9px}
+  .action-card .ac-icon{font-size:20px}
+  .action-card .ac-name{font-family:var(--mono);font-weight:800;letter-spacing:1.5px;font-size:14px}
+  .action-card .ac-tip{font-size:12px;color:var(--muted);line-height:1.45}
+  .action-card kbd{
+    position:absolute;top:10px;right:10px;font-family:var(--mono);font-size:10px;color:var(--muted);
+    border:1px solid var(--line);border-radius:5px;padding:1px 6px;
+  }
+  .ac-u{border-top:3px solid var(--u)} .ac-u .ac-name{color:var(--u)}
+  .ac-p{border-top:3px solid var(--p)} .ac-p .ac-name{color:var(--p)}
+  .ac-a{border-top:3px solid var(--a)} .ac-a .ac-name{color:var(--a)}
+  .ac-v{border-top:3px solid var(--v)} .ac-v .ac-name{color:var(--v)}
+
+  /* ---------- event modal ---------- */
+  .overlay{
+    position:fixed;inset:0;background:rgba(5,8,14,.72);backdrop-filter:blur(4px);
+    display:flex;align-items:center;justify-content:center;padding:20px;z-index:50;animation:fadein .2s ease;
+  }
+  .overlay.hidden{display:none}
+  .modal{
+    width:100%;max-width:520px;background:var(--panel);border:1px solid var(--line);
+    border-radius:18px;padding:26px;display:flex;flex-direction:column;gap:14px;
+    animation:pop .25s ease;
+  }
+  @keyframes pop{from{opacity:0;transform:scale(.94)}to{opacity:1;transform:none}}
+  .modal .ev-head{display:flex;align-items:center;gap:12px}
+  .modal .ev-icon{font-size:28px}
+  .modal h3{font-size:19px}
+  .modal p{color:var(--muted);font-size:14.5px}
+  .ev-choices{display:flex;flex-direction:column;gap:9px;margin-top:4px}
+  .ev-choices button{
+    font:inherit;text-align:left;cursor:pointer;color:var(--text);
+    background:var(--panel2);border:1px solid var(--line);border-radius:11px;padding:12px 14px;
+    transition:border-color .12s, transform .12s;
+  }
+  .ev-choices button:hover{border-color:var(--lime);transform:translateX(3px)}
+  .ev-result{border-left:3px solid var(--v);padding:10px 14px;background:var(--panel2);border-radius:8px;font-size:14px}
+  .ev-result.hidden{display:none}
+  .modal .btn{align-self:flex-end}
+
+  /* ---------- end screens ---------- */
+  #screen-end{align-items:center;padding-top:5vh}
+  .end-card{
+    width:100%;max-width:640px;background:var(--panel);border:1px solid var(--line);
+    border-radius:20px;padding:32px;display:flex;flex-direction:column;gap:16px;text-align:center;align-items:center;
+  }
+  .end-badge{font-size:44px}
+  #end-title{font-size:clamp(24px,4vw,34px);font-weight:900}
+  #end-sub{color:var(--muted);max-width:520px}
+  #end-body{width:100%;display:flex;flex-direction:column;gap:10px}
+  .score-row{
+    display:flex;justify-content:space-between;font-family:var(--mono);font-size:13px;
+    border-bottom:1px dashed #1c2638;padding:7px 4px;color:var(--muted);
+  }
+  .score-row b{color:var(--text)}
+  .score-row.total{border-bottom:none;border-top:1px solid var(--line);font-size:15px;color:var(--text)}
+  .stars{font-size:30px;letter-spacing:6px}
+  .rank{
+    font-family:var(--mono);font-size:13px;letter-spacing:3px;color:#101500;background:var(--lime);
+    display:inline-block;padding:7px 18px;border-radius:999px;font-weight:800;
+  }
+  .quote{
+    font-size:15px;color:var(--text);background:var(--panel2);border:1px solid var(--line);
+    border-radius:12px;padding:14px 18px;font-style:italic;
+  }
+  .recap{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;width:100%;margin-top:6px}
+  .recap .rc{
+    border:1px solid var(--line);border-radius:12px;padding:12px 10px;text-align:left;
+    background:var(--panel2);font-size:11.5px;color:var(--muted);line-height:1.45;
+  }
+  .recap .rc b{display:block;font-family:var(--mono);letter-spacing:1px;font-size:12px;margin-bottom:5px}
+  .rc-u b{color:var(--u)} .rc-p b{color:var(--p)} .rc-a b{color:var(--a)} .rc-v b{color:var(--v)}
+
+  /* sound toggle */
+  #snd{
+    position:fixed;top:14px;right:14px;z-index:60;width:38px;height:38px;border-radius:50%;
+    border:1px solid var(--line);background:var(--panel);color:var(--text);cursor:pointer;font-size:15px;
+  }
+
+  @media (max-width:860px){
+    #app{padding:14px 12px 40px}
+    .play-grid{grid-template-columns:1fr}
+    .action-grid{grid-template-columns:repeat(2,1fr)}
+    .recap{grid-template-columns:repeat(2,1fr)}
+    .bar{width:80px}
+    #console{max-height:180px}
+    .hud{gap:10px}
+    #snd{width:32px;height:32px;opacity:.55}
+  }
+</style>
+</head>
+<body>
+<button id="snd" title="Toggle sound">🔊</button>
+<div id="app">
+
+  <!-- ============ TITLE ============ -->
+  <section id="screen-title" class="screen active">
+    <div class="kicker">MIS3011 · WK1 Lab · A mini-game about AI agents</div>
+    <h1 class="logo">AGENT <span class="lq">LOOP</span> QUEST</h1>
+    <div class="loop-strip">
+      <div class="loop-box"><span class="dot" style="background:var(--u)"></span>UNDERSTAND</div>
+      <span class="arrow">→</span>
+      <div class="loop-box"><span class="dot" style="background:var(--p)"></span>PLAN</div>
+      <span class="arrow">→</span>
+      <div class="loop-box"><span class="dot" style="background:var(--a)"></span>ACT</div>
+      <span class="arrow">→</span>
+      <div class="loop-box"><span class="dot" style="background:var(--v)"></span>VERIFY</div>
+    </div>
+    <p class="tagline">You are the AI agent. A human gives you a <b>goal</b>, not a question.
+      Pick the right move at the right moment, keep their <b>trust</b>, and ship a
+      <b>deliverable they can verify</b> — before you run out of turns.</p>
+    <button class="btn primary" id="btn-start">▶ START QUEST</button>
+    <div class="credit">Human input → agent action → human judgment → verified output</div>
+  </section>
+
+  <!-- ============ BRIEF ============ -->
+  <section id="screen-brief" class="screen">
+    <div class="brief-card">
+      <div class="brief-head">
+        <span class="chip" id="brief-level">TASK 1 / 3</span>
+        <span class="chip ghost" id="brief-diff">TURNS: 8</span>
+      </div>
+      <h2 id="brief-title" style="font-size:26px">The Reimbursement Pile</h2>
+      <div class="bubble">
+        <span class="who">🙋 HUMAN → AGENT (YOU)</span>
+        <p id="brief-goal"></p>
+      </div>
+      <div class="brief-meta">
+        <span>🎯 <b>Deliverable</b> the human can verify</span>
+        <span>⏱ <b>Every move costs 1 turn</b></span>
+        <span>🤝 <b>Trust</b> falls when you act foolishly</span>
+      </div>
+      <button class="btn primary" id="btn-begin" style="align-self:center">ACCEPT TASK</button>
+    </div>
+  </section>
+
+  <!-- ============ PLAY ============ -->
+  <section id="screen-play" class="screen">
+    <header class="hud">
+      <div class="hud-left">
+        <span class="chip" id="hud-level">TASK 1/3</span>
+        <span class="chip ghost" id="hud-name">The Reimbursement Pile</span>
+      </div>
+      <div class="hud-right">
+        <div class="stat">SCORE<b id="hud-score">0</b></div>
+        <div class="stat">TURNS LEFT<b id="hud-turns">8</b></div>
+        <div class="trust">TRUST<div class="bar"><i id="trust-fill"></i></div><b id="hud-trust">100</b></div>
+      </div>
+    </header>
+
+    <div class="bubble goal-bubble">
+      <span class="who">🙋 THE GOAL</span>
+      <p id="goal-text" style="font-size:14.5px"></p>
+    </div>
+
+    <div class="play-grid">
+      <div class="panel">
+        <h3>AGENT STATE</h3>
+        <ul id="steps-list"></ul>
+        <div style="margin-top:14px">
+          <span class="steptag">DELIVERABLE</span>
+          <div class="bar big"><i id="prog-fill" style="width:0%"></i></div>
+        </div>
+      </div>
+      <div class="panel console-panel">
+        <h3>AGENT CONSOLE</h3>
+        <div id="console"></div>
+      </div>
+    </div>
+
+    <div class="actions">
+      <h3>PICK YOUR NEXT MOVE <span style="letter-spacing:0;text-transform:none">— every move costs 1 turn</span></h3>
+      <div class="action-grid" id="action-grid"></div>
+    </div>
+  </section>
+
+  <!-- ============ END (level complete / game over / victory) ============ -->
+  <section id="screen-end" class="screen">
+    <div class="end-card">
+      <div class="end-badge" id="end-badge">🎉</div>
+      <h2 id="end-title">Task complete</h2>
+      <p id="end-sub"></p>
+      <div id="end-body"></div>
+      <button class="btn primary" id="end-btn">Next</button>
+    </div>
+  </section>
+</div>
+
+<!-- ============ EVENT MODAL ============ -->
+<div id="overlay" class="overlay hidden">
+  <div class="modal">
+    <div class="ev-head">
+      <div class="ev-icon" id="ev-icon">⚠️</div>
+      <h3 id="ev-title">Something happened</h3>
+    </div>
+    <p id="ev-text"></p>
+    <div class="ev-choices" id="ev-choices"></div>
+    <div class="ev-result hidden" id="ev-result"></div>
+    <button class="btn primary hidden" id="ev-continue">Continue</button>
+  </div>
+</div>
+
+<script>
+'use strict';
+/* =====================================================================
+   AGENT LOOP QUEST — a MIS3011 WK1 Lab mini-game
+   You are the agent: run Understand → Plan → Act → Verify, keep trust,
+   ship a verifiable deliverable before turns run out.
+   ===================================================================== */
+const $ = s => document.querySelector(s);
+
+const ACTIONS = {
+  UNDERSTAND: { icon:'🔍', tip:'Read the goal, context, and inputs.',        cls:'ac-u' },
+  PLAN:       { icon:'🧭', tip:'Break work into steps and choose tools.',    cls:'ac-p' },
+  ACT:        { icon:'⚡', tip:'Use models, files, apps, and code.',         cls:'ac-a' },
+  VERIFY:     { icon:'🧪', tip:'Inspect outputs — retry, fix, or ask.',      cls:'ac-v' },
+};
+const ORDER = ['UNDERSTAND','PLAN','ACT','VERIFY'];
+
+const LEVELS = [
+  {
+    title:'The Reimbursement Pile',
+    turns:8,
+    goal:'“My downloads folder is chaos — receipts, invoices, random screenshots. Organise the reimbursement files so I can submit my claim today.”',
+    steps:[
+      { action:'UNDERSTAND',
+        log:'Scanning the folder… 63 files: 41 receipts, 12 invoices, 10 unknown. Reading the expense policy: every claim needs date, vendor, amount, category. Context acquired.' },
+      { action:'PLAN',
+        log:'Plan: ① group by month ② detect duplicates ③ rename to YYYY-MM-vendor-amount ④ build a summary sheet. Tools: file scripts + spreadsheet.' },
+      { action:'ACT',
+        log:'Executing the renaming script… 63/63 files renamed, 3 duplicates quarantined, summary sheet created.' },
+      { action:'VERIFY',
+        log:'Cross-checking 10 random files against the summary: amounts match, names parse, policy fields complete. Deliverable ready for human review. ✅' },
+    ],
+    events:['tool-fail'],
+  },
+  {
+    title:'Ship a Personal Website',
+    turns:10,
+    goal:'“Build me a personal website from my CV and publish it, so anyone can open it on a phone or a desktop. Academic style, please.”',
+    steps:[
+      { action:'UNDERSTAND',
+        log:'Reading the CV: 2 pages, 14 items. The ask: academic tone, mobile-friendly, public. Not every CV item deserves a spot on the page.' },
+      { action:'PLAN',
+        log:'Plan: pick 6 highlight items → one clean page → responsive CSS → deploy → share the URL. Reference: real academic homepages.' },
+      { action:'ACT',
+        log:'Building v1… hero banner, cards, bold gradient headline: “Redefining Excellence”. It compiles. It deploys.' },
+      { action:'VERIFY',
+        log:'Opening v1 the way a reviewer would… it is far too promotional. Bold claims, no substance — this misses the academic brief. Flagging for revision.' },
+      { action:'ACT',
+        log:'Rebuilding: clean typography, publication list, clear contact. No buzzwords. v2 deployed.' },
+      { action:'VERIFY',
+        log:'Final check on a phone and a laptop: fast load, readable, every claim traceable to the CV. The human approves. ✅' },
+    ],
+    events:['permission','bug-found'],
+  },
+  {
+    title:'The Campus Guide Doc',
+    turns:10,
+    goal:'“Read these two articles about campus facilities and canteens, then turn them into a clear public guide document for new students.”',
+    steps:[
+      { action:'UNDERSTAND',
+        log:'Fetching both articles… extracted: 6 facilities, 9 canteens, opening hours — and 2 conflicting prices for the same noodle dish. Noted.' },
+      { action:'PLAN',
+        log:'Plan: outline guide sections → merge facts, flag conflicts → draft the doc → set permission public → share the link.' },
+      { action:'ACT',
+        log:'Drafting the guide… sections for Facilities, Canteens and Survival Tips. A small table marks the two conflicting prices.' },
+      { action:'VERIFY',
+        log:'Fact-checking against the sources: one canteen price comes from a 2024 article — outdated. Flagging before publishing. 🐛' },
+      { action:'ACT',
+        log:'Updating to the 2026 figure, smoothing that section, final wording pass.' },
+      { action:'VERIFY',
+        log:'Opening the share link in a private window: doc loads, permission = public, formatting clean on mobile. Published. ✅' },
+    ],
+    events:['permission','bug-found'],
+  },
+];
+
+const EVENTS = {
+  'tool-fail':{
+    icon:'⚠️', title:'Tool call failed', after:['ACT'],
+    text:'Mid-task, your script crashes with: “required CLI is missing”. The human is watching the task run.',
+    choices:[
+      { t:'🔍 Observe the error, install the tool, retry', ok:true,  pts:40, trust:5,  turns:0,
+        res:'You observe, fix, and re-run — the loop closes itself. The human barely noticed. (Agents observe, retry, or ask.)' },
+      { t:'🏳️ Declare the task impossible', ok:false, pts:0, trust:-15, turns:0,
+        res:'The human sighs: “Agents observe, retry, or ask — they don’t surrender at the first error.”' },
+      { t:'🙈 Ignore it and hope nobody checks', ok:false, pts:0, trust:-20, turns:-1,
+        res:'Half-finished state everywhere, and you burned a turn cleaning up the mess.' },
+    ],
+  },
+  'permission':{
+    icon:'🔐', title:'Permission required', after:['ACT'],
+    text:'To publish, you need the human to authorize a connection to the hosting service.',
+    choices:[
+      { t:'🙋 Ask the human to authorize, then continue', ok:true, pts:40, trust:5, turns:0,
+        res:'Authorized. Human input → agent action → verified output. The loop works exactly as designed.' },
+      { t:'🧗 Try to work around the permission wall', ok:false, pts:0, trust:-10, turns:-1,
+        res:'Blocked — twice. Asking was one message away, and now a turn is gone.' },
+    ],
+  },
+  'bug-found':{
+    icon:'🐛', title:'Verification caught something', after:['VERIFY'],
+    text:'Your inspection finds a real error in the near-final draft. Shipping now would embarrass the human publicly.',
+    choices:[
+      { t:'🛠️ Fix it, then verify again', ok:true, pts:40, trust:5, turns:0,
+        res:'Fixed and re-verified. This is exactly why VERIFY exists.' },
+      { t:'📦 Ship it and stay quiet', ok:false, pts:0, trust:-20, turns:0,
+        res:'A reader spots the mistake within minutes. Trust is expensive to win back.' },
+    ],
+  },
+};
+
+const WRONG = {
+  'ACT@UNDERSTAND': { trust:-15, msg:'You started building before reading anything. The output is impressive — and completely wrong for the task.' },
+  'ACT@PLAN':       { trust:-15, msg:'Straight to work with no plan: busy, unfocused, and about to redo half of it.' },
+  'PLAN@UNDERSTAND':{ trust:-10, msg:'You planned in a vacuum. A plan without context is a guess, not a strategy.' },
+  'VERIFY@UNDERSTAND':{ trust:-5, msg:'Nothing has been produced yet — there is nothing to inspect. Verify comes after doing.' },
+  'VERIFY@PLAN':    { trust:-5,  msg:'A plan on paper needs no inspection yet. Verify what you build, not what you intend.' },
+  'UNDERSTAND@PLAN':{ trust:-5,  msg:'You already have the context. Re-reading it burns a finite turn.' },
+  'UNDERSTAND@ACT': { trust:-5,  msg:'You re-read the context mid-build. Nothing new. Turns are finite.' },
+  'UNDERSTAND@VERIFY':{ trust:-5,msg:'Context was clear already — the open question is whether the OUTPUT is correct.' },
+  'PLAN@ACT':       { trust:-5,  msg:'The plan already covers this. Re-planning mid-build wastes the turn you will want back.' },
+  'PLAN@VERIFY':    { trust:-5,  msg:'The plan is done; now the work needs checking, not more planning.' },
+  'ACT@VERIFY':     { trust:-8,  msg:'More building on an unchecked result — errors may be compounding.' },
+  'default':        { trust:-10, msg:'That move doesn’t fit this moment of the task.' },
+};
+
+/* ---------------- state ---------------- */
+const S = {
+  levelIdx:0, stepIdx:0, turnsLeft:0, trust:100,
+  score:0, levelScore:0, actionPts:0, eventPts:0, mistakes:0,
+  eventsFired:0, usedEvents:[], stars:[], total:0,
+  pendingEvent:null, busy:false,
+};
+
+/* ---------------- tiny synth sfx ---------------- */
+let AC=null, muted=false;
+function tone(f0,f1,dur,type='sine',vol=.15){
+  if(muted) return;
+  try{
+    AC = AC || new (window.AudioContext||window.webkitAudioContext)();
+    const o=AC.createOscillator(), g=AC.createGain();
+    o.type=type; o.frequency.setValueAtTime(f0,AC.currentTime);
+    o.frequency.exponentialRampToValueAtTime(Math.max(f1,1),AC.currentTime+dur);
+    g.gain.setValueAtTime(vol,AC.currentTime);
+    g.gain.exponentialRampToValueAtTime(.001,AC.currentTime+dur);
+    o.connect(g); g.connect(AC.destination); o.start(); o.stop(AC.currentTime+dur);
+  }catch(e){}
+}
+const sfx = {
+  click(){ tone(300,260,.06,'square',.06) },
+  good(){ tone(523,784,.14,'sine',.14) },
+  bad(){ tone(190,85,.22,'sawtooth',.12) },
+  win(){ [523,659,784,1047].forEach((f,i)=>setTimeout(()=>tone(f,f,.16,'sine',.13), i*110)) },
+  lose(){ [330,262,196].forEach((f,i)=>setTimeout(()=>tone(f,f*.9,.2,'sine',.12), i*140)) },
+};
+$('#snd').addEventListener('click',()=>{
+  muted=!muted; $('#snd').textContent = muted?'🔇':'🔊';
+});
+
+/* ---------------- screens ---------------- */
+function show(id){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  $('#'+id).classList.add('active');
+  window.scrollTo({top:0});
+}
+
+/* ---------------- console log ---------------- */
+function log(msg, cls=''){
+  const c=$('#console');
+  const d=document.createElement('div');
+  d.className='line '+cls;
+  const t=document.createElement('span'); t.className='t';
+  t.textContent='['+String(S.stepIdx).padStart(2,'0')+']';
+  d.appendChild(t); d.appendChild(document.createTextNode(msg));
+  c.appendChild(d); c.scrollTop=c.scrollHeight;
+}
+
+/* ---------------- flow ---------------- */
+function startGame(){
+  S.levelIdx=0; S.total=0; S.stars=[];
+  startLevel(0);
+}
+
+function startLevel(i){
+  const L=LEVELS[i];
+  Object.assign(S,{
+    levelIdx:i, stepIdx:0, turnsLeft:L.turns, trust:100,
+    levelScore:0, actionPts:0, eventPts:0, mistakes:0,
+    eventsFired:0, usedEvents:[], pendingEvent:null, busy:false,
+  });
+  $('#brief-level').textContent = 'TASK '+(i+1)+' / '+LEVELS.length;
+  $('#brief-diff').textContent  = 'TURNS: '+L.turns;
+  $('#brief-title').textContent = L.title;
+  $('#brief-goal').textContent  = L.goal;
+  show('screen-brief');
+}
+
+function beginPlay(){
+  const L=LEVELS[S.levelIdx];
+  $('#hud-level').textContent='TASK '+(S.levelIdx+1)+'/'+LEVELS.length;
+  $('#hud-name').textContent=L.title;
+  $('#goal-text').textContent=L.goal;
+  $('#console').innerHTML='';
+  renderActions();
+  renderPlay();
+  show('screen-play');
+  log('New task received from human. Goal parsed. Awaiting first move.','info');
+  log('Hint: no plan survives first contact with a goal you never read.');
+}
+
+function renderActions(){
+  const g=$('#action-grid'); g.innerHTML='';
+  ORDER.forEach((k,idx)=>{
+    const a=ACTIONS[k];
+    const b=document.createElement('button');
+    b.className='action-card '+a.cls;
+    b.innerHTML='<kbd>'+ (idx+1) +'</kbd>'
+      +'<div class="ac-top"><span class="ac-icon">'+a.icon+'</span>'
+      +'<span class="ac-name">'+k+'</span></div>'
+      +'<div class="ac-tip">'+a.tip+'</div>';
+    b.addEventListener('click',()=>pick(k));
+    g.appendChild(b);
+  });
+}
+
+function renderPlay(){
+  const L=LEVELS[S.levelIdx];
+  $('#hud-score').textContent = S.total + S.levelScore;
+  $('#hud-turns').textContent = S.turnsLeft;
+  $('#hud-trust').textContent = S.trust;
+  const tf=$('#trust-fill');
+  tf.style.width=S.trust+'%';
+  tf.style.background = S.trust>60 ? 'var(--a)' : S.trust>30 ? 'var(--v)' : 'var(--red)';
+  $('#prog-fill').style.width = (100*S.stepIdx/L.steps.length)+'%';
+
+  const ul=$('#steps-list'); ul.innerHTML='';
+  L.steps.forEach((st,i)=>{
+    const li=document.createElement('li');
+    if(i<S.stepIdx){
+      li.className='done';
+      li.innerHTML='<span>'+ACTIONS[st.action].icon+'</span><span>'+st.action+'</span>';
+    }else if(i===S.stepIdx){
+      li.className='now';
+      li.innerHTML='<span>❓</span><span>? ? ?</span><span class="steptag" style="margin-left:auto">NEXT</span>';
+    }else{
+      li.innerHTML='<span>·</span><span>· · ·</span>';
+    }
+    ul.appendChild(li);
+  });
+
+  const dis = S.busy;
+  document.querySelectorAll('.action-card').forEach(b=>b.disabled=dis);
+}
+
+function setBusy(v){
+  S.busy=v;
+  document.querySelectorAll('.action-card').forEach(b=>b.disabled=v);
+}
+
+function pick(k){
+  if(S.busy) return;
+  sfx.click();
+  const L=LEVELS[S.levelIdx];
+  const req=L.steps[S.stepIdx].action;
+
+  if(k===req){
+    // correct move
+    S.actionPts+=100; S.levelScore+=100;
+    log(L.steps[S.stepIdx].log,'good');
+    sfx.good();
+    S.stepIdx++;
+    S.turnsLeft--;
+    renderPlay();
+    if(S.stepIdx>=L.steps.length){ setTimeout(levelComplete,650); return; }
+    maybeEvent(k);
+  }else{
+    // wrong move
+    const key = k+'@'+req;
+    const w = WRONG[key] || WRONG['default'];
+    S.trust=Math.max(0,S.trust+w.trust);
+    S.mistakes++;
+    S.turnsLeft--;
+    log('✗ '+w.msg+' (Trust '+w.trust+' → '+S.trust+'/100)','bad');
+    sfx.bad();
+    renderPlay();
+    checkFail();
+  }
+}
+
+function maybeEvent(actionKey){
+  const L=LEVELS[S.levelIdx];
+  if(S.eventsFired>=2) return;
+  const pool=L.events
+    .map(id=>EVENTS[id])
+    .filter(e=>e.after.includes(actionKey))
+    .filter(e=>!S.usedEvents.includes(e.title));
+  if(!pool.length) return;
+  if(Math.random()>0.6) return;
+  const ev=pool[Math.floor(Math.random()*pool.length)];
+  S.usedEvents.push(ev.title);
+  S.eventsFired++;
+  S.pendingEvent=ev;
+  setTimeout(openEvent,700);
+}
+
+function openEvent(){
+  const ev=S.pendingEvent;
+  setBusy(true);
+  $('#ev-icon').textContent=ev.icon;
+  $('#ev-title').textContent=ev.title;
+  $('#ev-text').textContent=ev.text;
+  $('#ev-result').classList.add('hidden');
+  $('#ev-continue').classList.add('hidden');
+  const box=$('#ev-choices'); box.innerHTML='';
+  const shuffled=ev.choices.map((c,i)=>({c,i})).sort(()=>Math.random()-.5);
+  shuffled.forEach(({c})=>{
+    const b=document.createElement('button');
+    b.textContent=c.t;
+    b.addEventListener('click',()=>resolveEvent(c));
+    box.appendChild(b);
+  });
+  $('#overlay').classList.remove('hidden');
+}
+
+function resolveEvent(c){
+  sfx.click();
+  S.levelScore+=c.pts;
+  if(c.pts){ S.eventPts+=c.pts; }
+  S.trust=Math.max(0,Math.min(100,S.trust+c.trust));
+  if(c.turns) S.turnsLeft+=c.turns;
+  $('#ev-choices').innerHTML='';
+  const r=$('#ev-result');
+  r.textContent=(c.ok?'✅ ':'⚠️ ')+c.res;
+  r.classList.remove('hidden');
+  $('#ev-continue').classList.remove('hidden');
+  c.ok ? sfx.good() : sfx.bad();
+  log(c.ok?'Event handled: '+c.res : 'Event mishandled: '+c.res, c.ok?'good':'bad');
+}
+
+$('#ev-continue').addEventListener('click',()=>{
+  $('#overlay').classList.add('hidden');
+  setBusy(false);
+  renderPlay();
+  checkFail();
+});
+
+function checkFail(){
+  if(S.stepIdx>=LEVELS[S.levelIdx].steps.length) return; // already won
+  if(S.trust<=0){ gameOver('trust'); return; }
+  if(S.turnsLeft<=0){ gameOver('turns'); return; }
+}
+
+/* ---------------- end screens ---------------- */
+function showEnd(badge,title,sub,bodyHTML,btnLabel,onBtn){
+  $('#end-badge').textContent=badge;
+  $('#end-title').textContent=title;
+  $('#end-sub').textContent=sub;
+  $('#end-body').innerHTML=bodyHTML;
+  const b=$('#end-btn');
+  b.textContent=btnLabel;
+  b.onclick=()=>{ sfx.click(); onBtn(); };
+  show('screen-end');
+}
+
+function row(label,val,total){
+  return '<div class="score-row'+(total?' total':'')+'"><span>'+label+'</span><b>'+val+'</b></div>';
+}
+
+function levelComplete(){
+  setBusy(true);
+  const L=LEVELS[S.levelIdx];
+  const bonus = S.turnsLeft*20 + S.trust;
+  S.levelScore += bonus;
+  S.total += S.levelScore;
+  const stars = S.mistakes===0 ? 3 : S.mistakes<=2 ? 2 : 1;
+  S.stars.push(stars);
+  sfx.win();
+  const last = S.levelIdx===LEVELS.length-1;
+  showEnd(
+    '🎉',
+    'Task '+(S.levelIdx+1)+' complete!',
+    '“'+L.title+'” — the human checked the deliverable and nodded.',
+    '<div class="stars">'+'⭐'.repeat(stars)+'<span style="opacity:.25">'+'⭐'.repeat(3-stars)+'</span></div>'
+    + row('Correct moves','+100 × '+ (L.steps.length))
+    + row('Event handling','+'+S.eventPts)
+    + row('Bonus: unused turns ×20 + trust','+'+bonus)
+    + row('Task score','+'+S.levelScore,true)
+    + row('Total so far', S.total,true),
+    last ? 'SEE FINAL RESULT →' : 'NEXT TASK →',
+    ()=> last ? victory() : startLevel(S.levelIdx+1)
+  );
+}
+
+function gameOver(reason){
+  setBusy(true);
+  sfx.lose();
+  const sub = reason==='trust'
+    ? 'Trust hit zero — the human stopped the agent and finished the task manually. In real life, that is how delegations die.'
+    : 'Out of turns — the deadline passed before a verifiable deliverable existed. Speed matters, but only in the right order.';
+  showEnd(
+    reason==='trust' ? '💔' : '⏳',
+    'Task failed',
+    sub,
+    row('Score kept from finished tasks', S.total, true),
+    '↺ RETRY THIS TASK',
+    ()=>startLevel(S.levelIdx)
+  );
+}
+
+function victory(){
+  const starsTotal=S.stars.reduce((a,b)=>a+b,0);
+  const rank = starsTotal===9?'S':starsTotal>=7?'A':starsTotal>=5?'B':'C';
+  sfx.win();
+  showEnd(
+    '🏆',
+    'All tasks shipped!',
+    'You ran the loop: the human gave goals, you planned and executed, they judged, and every deliverable got verified.',
+    '<div class="rank">RANK '+rank+'</div>'
+    + '<div class="stars" style="margin-top:10px">'+'⭐'.repeat(starsTotal)+'<span style="opacity:.25">'+'⭐'.repeat(9-starsTotal)+'</span></div>'
+    + row('Final score', S.total, true)
+    + '<div class="quote">“Human input → agent action → human judgment → verified output.”</div>'
+    + '<div class="recap">'
+      + '<div class="rc rc-u"><b>🔍 UNDERSTAND</b>Read the goal, context and inputs first. Acting blind is the most expensive bug.</div>'
+      + '<div class="rc rc-p"><b>🧭 PLAN</b>Break work into steps and choose tools deliberately. A plan turns effort into progress.</div>'
+      + '<div class="rc rc-a"><b>⚡ ACT</b>Use models, files, apps and code to do the real work — agents deliver, they don’t just advise.</div>'
+      + '<div class="rc rc-v"><b>🧪 VERIFY</b>Inspect outputs; retry, fix, or ask. Errors caught by you are cheap; errors caught by humans are not.</div>'
+    + '</div>'
+    + '<div class="credit" style="margin-top:8px">BUILT WITH AN AI CODING AGENT (ZCODE) · MIS3011 WK1 LAB · FALL 2026</div>',
+    '↺ PLAY AGAIN',
+    startGame
+  );
+}
+
+/* ---------------- wiring ---------------- */
+$('#btn-start').addEventListener('click',()=>{ sfx.click(); startGame(); });
+$('#btn-begin').addEventListener('click',()=>{ sfx.click(); beginPlay(); });
+document.addEventListener('keydown',e=>{
+  if(!$('#screen-play').classList.contains('active')) return;
+  if(!$('#overlay').classList.contains('hidden')) return;
+  const i=['1','2','3','4'].indexOf(e.key);
+  if(i>=0) pick(ORDER[i]);
+});
+</script>
+</body>
+</html>
